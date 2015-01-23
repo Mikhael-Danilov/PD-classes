@@ -18,8 +18,12 @@
 package com.watabou.noosa;
 
 import java.util.ArrayList;
+import java.util.Map.Entry;
+import java.util.TreeMap;
 
+import javax.microedition.khronos.egl.EGL10;
 import javax.microedition.khronos.egl.EGLConfig;
+import javax.microedition.khronos.egl.EGLDisplay;
 import javax.microedition.khronos.opengles.GL10;
 
 import com.watabou.glscripts.Script;
@@ -36,11 +40,13 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.media.AudioManager;
+import android.opengl.ETC1Util;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.os.Vibrator;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
@@ -114,7 +120,7 @@ public class Game extends Activity implements GLSurfaceView.Renderer, View.OnTou
 		
 		view = new GLSurfaceView( this );
 		view.setEGLContextClientVersion( 2 );
-		view.setEGLConfigChooser( false );
+		view.setEGLConfigChooser(new glConfigChoser());
 		view.setRenderer( this );
 		view.setOnTouchListener( this );
 		setContentView( view );
@@ -317,4 +323,95 @@ public class Game extends Activity implements GLSurfaceView.Renderer, View.OnTou
 	public static String[] getVars(int id){
 		return context.getResources().getStringArray(id);
 	}
+}
+
+class glConfigChoser implements android.opengl.GLSurfaceView.EGLConfigChooser
+{
+
+	@Override
+	public EGLConfig chooseConfig(EGL10 egl, EGLDisplay display) {
+		try {
+			int num[] = new int[1];
+			if (!egl.eglGetConfigs(display, null, 0, num)) {
+				throw new Exception("glConfigChoser GetConfigs: get num");
+			}
+			EGLConfig[] configList = new EGLConfig[num[0]];
+			if (!egl.eglGetConfigs(display, configList, num[0], num)) {
+				throw new Exception("glConfigChoser GetConfigs: get configs");
+			}
+			return chooseConfig(egl, display, configList);
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	private int getAttribute(EGL10 egl, EGLDisplay display,EGLConfig config, int attribute){
+		int[] value = {0};
+
+		egl.eglGetConfigAttrib(display, config, attribute, value);
+		return value[0];
+	}
+	
+	private int formatScore(int r, int g, int b, int a, int d, int s)
+	{
+		int score = 0;
+		
+		if(r+g+b == 16){
+			score += 2;
+		}
+		
+		if(r+g+b > 16){
+			score += 1;
+		}
+		
+		if(d > 0){
+			score -= 1;
+		}
+		
+		if(d > 16){
+			score -= 1;
+		}
+		
+		if(a > 0){
+			score -=1;
+		}
+		
+		if(s > 0){
+			score -=1;
+		}
+		
+		return score;
+	}
+	
+	private EGLConfig chooseConfig(EGL10 egl, EGLDisplay display,EGLConfig configList[]) throws Exception {
+		
+		TreeMap<Integer,Integer> formats = new TreeMap<Integer,Integer>();
+		
+		Log.i("glConfigChoser",String.format("config num: %d", configList.length));
+		for (int i = 0; i < configList.length; i++) {
+			EGLConfig config = configList[i];
+
+			int r =  getAttribute(egl,display,config,EGL10.EGL_RED_SIZE);
+			int b =  getAttribute(egl,display,config,EGL10.EGL_BLUE_SIZE);
+			int g =  getAttribute(egl,display,config,EGL10.EGL_GREEN_SIZE);
+			
+			int a = getAttribute(egl,display,config,EGL10.EGL_ALPHA_SIZE);
+			int d = getAttribute(egl,display,config,EGL10.EGL_DEPTH_SIZE);
+			
+			int s = getAttribute(egl,display,config,EGL10.EGL_STENCIL_SIZE);
+		
+			formats.put(formatScore(r,g,b,a,d,s),i);
+			
+			Log.i("glConfigChoser",String.format("%d -> r: %d, g: %d, b: %d, a: %d, d: %d, s: %d",i,r,g,b,a,d,s));				
+		}
+	
+		Entry<Integer,Integer> best = formats.lastEntry();
+		
+		EGLConfig config = configList[best.getValue()];
+		
+		Log.i("glConfigChoser",String.format("chosen: %d",best.getValue()));
+		
+		return config;
+	}
+	
 }
